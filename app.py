@@ -24,13 +24,9 @@ VGG_PATH = "models/vgg_normalised.pth"
 DECODER_PATH = "models/decoder_final.pth"
 
 
-encoder = VGGEncoder(
-    VGG_PATH,
-    device=device
-).to(device)
+encoder = VGGEncoder(VGG_PATH).to(device)
 
 decoder = Decoder().to(device)
-
 
 decoder.load_state_dict(
     torch.load(
@@ -38,7 +34,6 @@ decoder.load_state_dict(
         map_location=device
     )
 )
-
 
 encoder.eval()
 decoder.eval()
@@ -57,8 +52,15 @@ def stylize(content_image, style_image, alpha):
     with torch.no_grad():
 
         # Extract VGG features
-        content_features = encoder(content_tensor)
-        style_features = encoder(style_tensor)
+        content_features = encoder(
+            content_tensor,
+            is_test=True
+        )
+
+        style_features = encoder(
+            style_tensor,
+            is_test=True
+        )
 
         # Apply AdaIN
         target_features = adaptive_instance_normalization(
@@ -73,7 +75,9 @@ def stylize(content_image, style_image, alpha):
         )
 
         # Generate stylized image
-        generated_image = decoder(target_features)
+        generated_image = decoder(
+            target_features
+        )
 
     # Convert tensor back to PIL image
     return tensor_to_image(generated_image)
@@ -121,22 +125,16 @@ css = """
     border-radius: 10px;
 }
 
-
-/* Cards */
 .gradio-container .block {
     background: rgba(255,255,255,0.06);
     border: 1px solid rgba(192,132,252,0.4);
     border-radius: 18px;
 }
 
-
-/* Slider */
 input[type="range"] {
     accent-color: #8b5cf6;
 }
 
-
-/* Generate Button */
 button.primary {
     background: linear-gradient(90deg, #7c3aed, #ec4899) !important;
     color: white !important;
@@ -147,15 +145,12 @@ button.primary {
     border: none !important;
 }
 
-
 button.primary:hover {
     box-shadow: 0 0 25px #c084fc;
     transform: scale(1.02);
     transition: 0.3s;
 }
 
-
-/* Hide Gradio footer */
 footer {
     display: none !important;
 }
@@ -163,7 +158,7 @@ footer {
 
 
 # ==========================================
-# Gradio Application
+# Gradio Interface
 # ==========================================
 
 with gr.Blocks(
@@ -172,7 +167,6 @@ with gr.Blocks(
     theme=gr.themes.Soft()
 ) as demo:
 
-    # Hero Section
     gr.HTML(
         """
         <div class="hero-title">
@@ -192,8 +186,6 @@ with gr.Blocks(
         """
     )
 
-
-    # Input Images
     with gr.Row():
 
         content_input = gr.Image(
@@ -206,8 +198,6 @@ with gr.Blocks(
             label="🎨 Style Image"
         )
 
-
-    # Style Strength Slider
     strength = gr.Slider(
         minimum=0,
         maximum=1,
@@ -216,22 +206,16 @@ with gr.Blocks(
         label="✨ Style Strength"
     )
 
-
-    # Generate Button
     generate_button = gr.Button(
         "🚀 Generate Artwork",
         variant="primary"
     )
 
-
-    # Output Image
     output_image = gr.Image(
         type="pil",
         label="🖼️ Generated Artwork"
     )
 
-
-    # Connect button with model
     generate_button.click(
         fn=stylize,
         inputs=[
