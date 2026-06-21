@@ -1,4 +1,3 @@
-
 import torch
 import gradio as gr
 
@@ -13,8 +12,7 @@ from src.utils import preprocess_image, tensor_to_image
 # ==========================================
 
 device = torch.device(
-    "cuda" if torch.cuda.is_available()
-    else "cpu"
+    "cuda" if torch.cuda.is_available() else "cpu"
 )
 
 
@@ -26,8 +24,13 @@ VGG_PATH = "models/vgg_normalised.pth"
 DECODER_PATH = "models/decoder_final.pth"
 
 
-encoder = VGGEncoder(VGG_PATH).to(device)
+encoder = VGGEncoder(
+    VGG_PATH,
+    device=device
+).to(device)
+
 decoder = Decoder().to(device)
+
 
 decoder.load_state_dict(
     torch.load(
@@ -42,54 +45,38 @@ decoder.eval()
 
 
 # ==========================================
-# Style Transfer Function
+# AdaIN Style Transfer Function
 # ==========================================
 
 def stylize(content_image, style_image, alpha):
 
-    content_tensor = preprocess_image(
-        content_image
-    ).to(device)
-
-    style_tensor = preprocess_image(
-        style_image
-    ).to(device)
-
+    # Convert images to tensors
+    content_tensor = preprocess_image(content_image).to(device)
+    style_tensor = preprocess_image(style_image).to(device)
 
     with torch.no_grad():
 
-        content_features = encoder(
-            content_tensor,
-            is_test=True
-        )
+        # Extract VGG features
+        content_features = encoder(content_tensor)
+        style_features = encoder(style_tensor)
 
-        style_features = encoder(
-            style_tensor,
-            is_test=True
-        )
-
-
+        # Apply AdaIN
         target_features = adaptive_instance_normalization(
             content_features,
             style_features
         )
 
-
+        # Control style strength
         target_features = (
-            alpha * target_features
-            +
+            alpha * target_features +
             (1 - alpha) * content_features
         )
 
+        # Generate stylized image
+        generated_image = decoder(target_features)
 
-        generated_image = decoder(
-            target_features
-        )
-
-
-    return tensor_to_image(
-        generated_image
-    )
+    # Convert tensor back to PIL image
+    return tensor_to_image(generated_image)
 
 
 # ==========================================
@@ -109,17 +96,21 @@ css = """
     font-weight: bold;
     color: #c084fc;
     text-shadow: 0 0 25px #9333ea;
+    margin-bottom: 10px;
 }
 
 .hero-subtitle {
     text-align: center;
-    color: #e879f9;
     font-size: 20px;
+    color: #e879f9;
+    margin-bottom: 5px;
 }
 
 .hero-description {
     text-align: center;
     color: #d8b4fe;
+    font-size: 16px;
+    margin-bottom: 20px;
 }
 
 .divider {
@@ -127,8 +118,44 @@ css = """
     width: 200px;
     margin: 20px auto;
     background: linear-gradient(90deg, #7c3aed, #ec4899);
+    border-radius: 10px;
 }
 
+
+/* Cards */
+.gradio-container .block {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(192,132,252,0.4);
+    border-radius: 18px;
+}
+
+
+/* Slider */
+input[type="range"] {
+    accent-color: #8b5cf6;
+}
+
+
+/* Generate Button */
+button.primary {
+    background: linear-gradient(90deg, #7c3aed, #ec4899) !important;
+    color: white !important;
+    font-size: 22px !important;
+    font-weight: bold !important;
+    border-radius: 30px !important;
+    height: 60px !important;
+    border: none !important;
+}
+
+
+button.primary:hover {
+    box-shadow: 0 0 25px #c084fc;
+    transform: scale(1.02);
+    transition: 0.3s;
+}
+
+
+/* Hide Gradio footer */
 footer {
     display: none !important;
 }
@@ -136,15 +163,16 @@ footer {
 
 
 # ==========================================
-# Gradio Interface
+# Gradio Application
 # ==========================================
 
 with gr.Blocks(
     css=css,
-    title="NeuralArt AI - AdaIN Style Transfer"
+    title="NeuralArt AI - AdaIN Style Transfer",
+    theme=gr.themes.Soft()
 ) as demo:
 
-
+    # Hero Section
     gr.HTML(
         """
         <div class="hero-title">
@@ -157,6 +185,7 @@ with gr.Blocks(
 
         <div class="hero-description">
             Powered by Adaptive Instance Normalization (AdaIN)
+            and Deep Neural Networks
         </div>
 
         <div class="divider"></div>
@@ -164,6 +193,7 @@ with gr.Blocks(
     )
 
 
+    # Input Images
     with gr.Row():
 
         content_input = gr.Image(
@@ -171,13 +201,13 @@ with gr.Blocks(
             label="📷 Content Image"
         )
 
-
         style_input = gr.Image(
             type="pil",
             label="🎨 Style Image"
         )
 
 
+    # Style Strength Slider
     strength = gr.Slider(
         minimum=0,
         maximum=1,
@@ -187,18 +217,21 @@ with gr.Blocks(
     )
 
 
+    # Generate Button
     generate_button = gr.Button(
         "🚀 Generate Artwork",
         variant="primary"
     )
 
 
+    # Output Image
     output_image = gr.Image(
         type="pil",
         label="🖼️ Generated Artwork"
     )
 
 
+    # Connect button with model
     generate_button.click(
         fn=stylize,
         inputs=[
@@ -215,5 +248,4 @@ with gr.Blocks(
 # ==========================================
 
 if __name__ == "__main__":
-
     demo.launch()
