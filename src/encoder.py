@@ -3,70 +3,82 @@ import torch.nn as nn
 
 
 class VGGEncoder(nn.Module):
-    def __init__(self, vgg_path):
+    def __init__(self, vgg_path, device="cpu"):
         super(VGGEncoder, self).__init__()
 
         self.vgg = nn.Sequential(
-            nn.Conv2d(3, 3, (1, 1)),
-            nn.ReflectionPad2d((1, 1, 1, 1)),
-            nn.Conv2d(3, 64, (3, 3)),
-            nn.ReLU(),
+            # relu1_1
+            nn.Conv2d(3, 3, 1),
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(3, 64, 3),
+            nn.ReLU(inplace=True),
 
-            nn.ReflectionPad2d((1, 1, 1, 1)),
-            nn.Conv2d(64, 64, (3, 3)),
-            nn.ReLU(),
+            # relu1_2
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(64, 64, 3),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2, ceil_mode=True),
 
-            nn.MaxPool2d((2, 2), (2, 2), (0, 0), ceil_mode=True),
+            # relu2_1
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(64, 128, 3),
+            nn.ReLU(inplace=True),
 
-            nn.ReflectionPad2d((1, 1, 1, 1)),
-            nn.Conv2d(64, 128, (3, 3)),
-            nn.ReLU(),
+            # relu2_2
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(128, 128, 3),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2, ceil_mode=True),
 
-            nn.ReflectionPad2d((1, 1, 1, 1)),
-            nn.Conv2d(128, 128, (3, 3)),
-            nn.ReLU(),
+            # relu3_1
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(128, 256, 3),
+            nn.ReLU(inplace=True),
 
-            nn.MaxPool2d((2, 2), (2, 2), (0, 0), ceil_mode=True),
+            # relu3_2
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(256, 256, 3),
+            nn.ReLU(inplace=True),
 
-            nn.ReflectionPad2d((1, 1, 1, 1)),
-            nn.Conv2d(128, 256, (3, 3)),
-            nn.ReLU(),
+            # relu3_3
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(256, 256, 3),
+            nn.ReLU(inplace=True),
 
-            nn.ReflectionPad2d((1, 1, 1, 1)),
-            nn.Conv2d(256, 256, (3, 3)),
-            nn.ReLU(),
+            # relu3_4
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(256, 256, 3),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2, ceil_mode=True),
 
-            nn.ReflectionPad2d((1, 1, 1, 1)),
-            nn.Conv2d(256, 256, (3, 3)),
-            nn.ReLU(),
-
-            nn.ReflectionPad2d((1, 1, 1, 1)),
-            nn.Conv2d(256, 256, (3, 3)),
-            nn.ReLU(),
-
-            nn.MaxPool2d((2, 2), (2, 2), (0, 0), ceil_mode=True),
-
-            nn.ReflectionPad2d((1, 1, 1, 1)),
-            nn.Conv2d(256, 512, (3, 3)),
-            nn.ReLU(),
-
+            # relu4_1 (last layer used by AdaIN)
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(256, 512, 3),
+            nn.ReLU(inplace=True)
         )
 
-        self.vgg.load_state_dict(torch.load(vgg_path))
+        # Load pretrained VGG weights
+        self.vgg.load_state_dict(
+            torch.load(vgg_path, map_location=device)
+        )
 
-        self.enc_1 = nn.Sequential(*list(self.vgg.children())[:4])
-        self.enc_2 = nn.Sequential(*list(self.vgg.children())[4:11])
-        self.enc_3 = nn.Sequential(*list(self.vgg.children())[11:18])
-        self.enc_4 = nn.Sequential(*list(self.vgg.children())[18:31])
+        layers = list(self.vgg.children())
 
-        for name in ['enc_1', 'enc_2', 'enc_3', 'enc_4']:
-            for param in getattr(self, name).parameters():
+        self.enc_1 = nn.Sequential(*layers[:4])
+        self.enc_2 = nn.Sequential(*layers[4:11])
+        self.enc_3 = nn.Sequential(*layers[11:18])
+        self.enc_4 = nn.Sequential(*layers[18:31])
+
+        # Freeze encoder
+        for block in [self.enc_1, self.enc_2, self.enc_3, self.enc_4]:
+            for param in block.parameters():
                 param.requires_grad = False
 
-    def forward(self, x):
-        h1 = self.enc_1(x)
-        h2 = self.enc_2(h1)
-        h3 = self.enc_3(h2)
-        h4 = self.enc_4(h3)
 
-        return h4
+    def forward(self, x):
+        x = self.enc_1(x)
+        x = self.enc_2(x)
+        x = self.enc_3(x)
+        x = self.enc_4(x)
+
+        return x
